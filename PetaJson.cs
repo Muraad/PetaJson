@@ -15,7 +15,7 @@
 // Define PETAJSON_NO_DYNAMIC to disable Expando support
 // Define PETAJSON_NO_EMIT to disable Reflection.Emit
 // Define PETAJSON_NO_DATACONTRACT to disable support for [DataContract]/[DataMember]
-
+// Define PETAJSON_PORTABLE to enable usage of TypeInfo instead of Type for Reflection
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -34,6 +34,9 @@ using System.Reflection.Emit;
 #if !PETAJSON_NO_DATACONTRACT
 using System.Runtime.Serialization;
 #endif
+#if PETAJSON_PORTABLE
+using System.Diagnostics;
+#endif
 
 
 
@@ -44,7 +47,7 @@ namespace PetaJson
     public enum JsonOptions
     {
         None = 0,
-        WriteWhitespace  = 0x00000001,
+        WriteWhitespace = 0x00000001,
         DontWriteWhitespace = 0x00000002,
         StrictParser = 0x00000004,
         NonStrictParser = 0x00000008,
@@ -86,6 +89,7 @@ namespace PetaJson
             writer.WriteValue(o);
         }
 
+#if !PETAJSON_PORTABLE
         // Write an object to a file
         public static void WriteFile(string filename, object o, JsonOptions options = JsonOptions.None)
         {
@@ -94,7 +98,7 @@ namespace PetaJson
                 Write(w, o, options);
             }
         }
-
+#endif
         // Format an object as a json string
         public static string Format(object o, JsonOptions options = JsonOptions.None)
         {
@@ -117,9 +121,13 @@ namespace PetaJson
             }
             catch (Exception x)
             {
-				var loc = reader == null ? new JsonLineOffset() : reader.CurrentTokenPosition;
-				Console.WriteLine("Exception thrown while parsing JSON at {0}, context:{1}\n{2}", loc, reader.Context, x.ToString()); 
-				throw new JsonParseException(x, reader.Context, loc);
+                var loc = reader == null ? new JsonLineOffset() : reader.CurrentTokenPosition;
+#if PETAJSON_PORTABLE
+                Debug.WriteLine("Exception thrown while parsing JSON at {0}, context:{1}\n{2}", loc, reader.Context, x.ToString());
+#else
+                Console.WriteLine("Exception thrown while parsing JSON at {0}, context:{1}\n{2}", loc, reader.Context, x.ToString());
+#endif
+                throw new JsonParseException(x, reader.Context, loc);
             }
         }
 
@@ -134,8 +142,13 @@ namespace PetaJson
         {
             if (into == null)
                 throw new NullReferenceException();
+#if PETAJSON_PORTABLE
+            if (into.GetType().GetTypeInfo().IsValueType)
+                throw new InvalidOperationException("Can't ParseInto a value type");
+#else
             if (into.GetType().IsValueType)
                 throw new InvalidOperationException("Can't ParseInto a value type");
+#endif
 
             Internal.Reader reader = null;
             try
@@ -146,12 +159,17 @@ namespace PetaJson
             }
             catch (Exception x)
             {
-				var loc = reader == null ? new JsonLineOffset() : reader.CurrentTokenPosition;
-				Console.WriteLine("Exception thrown while parsing JSON at {0}, context:{1}\n{2}", loc, reader.Context, x.ToString()); 
-				throw new JsonParseException(x,reader.Context,loc);
+                var loc = reader == null ? new JsonLineOffset() : reader.CurrentTokenPosition;
+#if PETAJSON_PORTABLE
+                Debug.WriteLine("Exception thrown while parsing JSON at {0}, context:{1}\n{2}", loc, reader.Context, x.ToString());
+#else
+                Console.WriteLine("Exception thrown while parsing JSON at {0}, context:{1}\n{2}", loc, reader.Context, x.ToString());
+#endif
+                throw new JsonParseException(x, reader.Context, loc);
             }
         }
 
+#if !PETAJSON_PORTABLE
         // Parse an object of specified type from a file
         public static object ParseFile(string filename, Type type, JsonOptions options = JsonOptions.None)
         {
@@ -178,6 +196,7 @@ namespace PetaJson
                 ParseInto(r, into, options);
             }
         }
+#endif
 
         // Parse an object from a string
         public static object Parse(string data, Type type, JsonOptions options = JsonOptions.None)
@@ -342,11 +361,11 @@ namespace PetaJson
             Internal.Reader._intoParserResolver = resolver;
         }
 
-        public static bool WalkPath(this IDictionary<string, object> This, string Path, bool create, Func<IDictionary<string,object>,string, bool> leafCallback)
+        public static bool WalkPath(this IDictionary<string, object> This, string Path, bool create, Func<IDictionary<string, object>, string, bool> leafCallback)
         {
             // Walk the path
             var parts = Path.Split('.');
-            for (int i = 0; i < parts.Length-1; i++)
+            for (int i = 0; i < parts.Length - 1; i++)
             {
                 object val;
                 if (!This.TryGetValue(parts[i], out val))
@@ -357,11 +376,11 @@ namespace PetaJson
                     val = new Dictionary<string, object>();
                     This[parts[i]] = val;
                 }
-                This = (IDictionary<string,object>)val;
+                This = (IDictionary<string, object>)val;
             }
 
             // Process the leaf
-            return leafCallback(This, parts[parts.Length-1]);
+            return leafCallback(This, parts[parts.Length - 1]);
         }
 
         public static bool PathExists(this IDictionary<string, object> This, string Path)
@@ -378,7 +397,11 @@ namespace PetaJson
                 {
                     if (val == null)
                         def = val;
+#if PETAJSON_PORTABLE
+                    else if(type.GetTypeInfo().IsAssignableFrom(val.GetType().GetTypeInfo()))
+#else
                     else if (type.IsAssignableFrom(val.GetType()))
+#endif
                         def = val;
                     else
                         def = Reparse(type, val);
@@ -390,7 +413,7 @@ namespace PetaJson
         }
 
         // Ensure there's an object of type T at specified path
-        public static T GetObjectAtPath<T>(this IDictionary<string, object> This, string Path) where T:class,new()
+        public static T GetObjectAtPath<T>(this IDictionary<string, object> This, string Path) where T : class,new()
         {
             T retVal = null;
             This.WalkPath(Path, true, (dict, key) =>
@@ -424,7 +447,7 @@ namespace PetaJson
         {
             JsonOptions resolved = JsonOptions.None;
 
-            if ((options & (JsonOptions.WriteWhitespace|JsonOptions.DontWriteWhitespace))!=0)
+            if ((options & (JsonOptions.WriteWhitespace | JsonOptions.DontWriteWhitespace)) != 0)
                 resolved |= options & (JsonOptions.WriteWhitespace | JsonOptions.DontWriteWhitespace);
             else
                 resolved |= WriteWhitespaceDefault ? JsonOptions.WriteWhitespace : JsonOptions.DontWriteWhitespace;
@@ -439,14 +462,18 @@ namespace PetaJson
     }
 
     // Called before loading via reflection
+#if !PETAJSON_PORTABLE
     [Obfuscation(Exclude = true, ApplyToMembers = true)]
+#endif
     public interface IJsonLoading
     {
         void OnJsonLoading(IJsonReader r);
     }
 
     // Called after loading via reflection
+#if !PETAJSON_PORTABLE
     [Obfuscation(Exclude = true, ApplyToMembers = true)]
+#endif
     public interface IJsonLoaded
     {
         void OnJsonLoaded(IJsonReader r);
@@ -454,21 +481,27 @@ namespace PetaJson
 
     // Called for each field while loading from reflection
     // Return true if handled
+#if !PETAJSON_PORTABLE
     [Obfuscation(Exclude = true, ApplyToMembers = true)]
+#endif
     public interface IJsonLoadField
     {
         bool OnJsonField(IJsonReader r, string key);
     }
 
     // Called when about to write using reflection
+#if !PETAJSON_PORTABLE
     [Obfuscation(Exclude = true, ApplyToMembers = true)]
+#endif
     public interface IJsonWriting
     {
         void OnJsonWriting(IJsonWriter w);
     }
 
     // Called after written using reflection
+#if !PETAJSON_PORTABLE
     [Obfuscation(Exclude = true, ApplyToMembers = true)]
+#endif
     public interface IJsonWritten
     {
         void OnJsonWritten(IJsonWriter w);
@@ -488,7 +521,9 @@ namespace PetaJson
     }
 
     // Passed to registered parsers
-    [Obfuscation(Exclude=true, ApplyToMembers=true)]
+#if !PETAJSON_PORTABLE
+    [Obfuscation(Exclude = true, ApplyToMembers = true)]
+#endif
     public interface IJsonReader
     {
         object Parse(Type type);
@@ -505,7 +540,9 @@ namespace PetaJson
     }
 
     // Passed to registered formatters
+#if !PETAJSON_PORTABLE
     [Obfuscation(Exclude = true, ApplyToMembers = true)]
+#endif
     public interface IJsonWriter
     {
         void WriteStringLiteral(string str);
@@ -521,7 +558,7 @@ namespace PetaJson
     // Exception thrown for any parse error
     public class JsonParseException : Exception
     {
-        public JsonParseException(Exception inner, string context, JsonLineOffset position) : 
+        public JsonParseException(Exception inner, string context, JsonLineOffset position) :
             base(string.Format("JSON parse error at {0}{1} - {2}", position, string.IsNullOrEmpty(context) ? "" : string.Format(", context {0}", context), inner.Message), inner)
         {
             Position = position;
@@ -609,7 +646,9 @@ namespace PetaJson
 
     namespace Internal
     {
+#if !PETAJSON_PORTABLE
         [Obfuscation(Exclude = true, ApplyToMembers = true)]
+#endif
         public enum Token
         {
             EOF,
@@ -850,10 +889,18 @@ namespace PetaJson
                 }
 
                 // Enumerated type?
+#if PETAJSON_PORTABLE
+                TypeInfo typeInfo = type.GetTypeInfo();
+                if(typeInfo.IsEnum)
+                {
+                    if(typeInfo.GetCustomAttributes(typeof(FlagsAttribute), false).Any())
+#else
                 if (type.IsEnum)
                 {
                     if (type.GetCustomAttributes(typeof(FlagsAttribute), false).Any())
-                        return ReadLiteral(literal => {
+#endif
+                        return ReadLiteral(literal =>
+                        {
                             try
                             {
                                 return Enum.Parse(type, (string)literal);
@@ -875,15 +922,30 @@ namespace PetaJson
                     var list = DecoratingActivator.CreateInstance(listType);
                     ParseInto(list);
 
+#if PETAJSON_PORTABLE
+                    return listType.GetTypeInfo().GetDeclaredMethod("ToArray").Invoke(list, null);
+#else
                     return listType.GetMethod("ToArray").Invoke(list, null);
+#endif
                 }
 
                 // Convert interfaces to concrete types
+#if PETAJSON_PORTABLE
+                if (typeInfo.IsInterface)
+                {
+                    type = Utils.ResolveInterfaceToClass(type);
+                    typeInfo = type.GetTypeInfo();
+                }
+
+                // Untyped dictionary?
+                if (_tokenizer.CurrentToken == Token.OpenBrace && (typeInfo.IsAssignableFrom(typeof(IDictionary<string, object>).GetTypeInfo())))
+#else
                 if (type.IsInterface)
                     type = Utils.ResolveInterfaceToClass(type);
 
                 // Untyped dictionary?
                 if (_tokenizer.CurrentToken == Token.OpenBrace && (type.IsAssignableFrom(typeof(IDictionary<string, object>))))
+#endif
                 {
 #if !PETAJSON_NO_DYNAMIC
                     var container = (new ExpandoObject()) as IDictionary<string, object>;
@@ -897,9 +959,13 @@ namespace PetaJson
 
                     return container;
                 }
-               
+
+#if PETAJSON_PORTABLE
+                if (_tokenizer.CurrentToken == Token.OpenSquare && (typeInfo.IsAssignableFrom(typeof(List<object>).GetTypeInfo())))
+#else
                 // Untyped list?
                 if (_tokenizer.CurrentToken == Token.OpenSquare && (type.IsAssignableFrom(typeof(List<object>))))
+#endif
                 {
                     var container = new List<object>();
                     ParseArray(() =>
@@ -909,16 +975,24 @@ namespace PetaJson
                     return container;
                 }
 
+#if PETAJSON_PORTABLE
+                if (_tokenizer.CurrentToken == Token.Literal && typeInfo.IsAssignableFrom(_tokenizer.LiteralType.GetTypeInfo()))
+#else
                 // Untyped literal?
                 if (_tokenizer.CurrentToken == Token.Literal && type.IsAssignableFrom(_tokenizer.LiteralType))
+#endif
                 {
                     var lit = _tokenizer.LiteralValue;
                     _tokenizer.NextToken();
                     return lit;
                 }
 
+#if PETAJSON_PORTABLE
+                if(typeInfo.IsValueType)
+#else
                 // Call value type resolver
                 if (type.IsValueType)
+#endif
                 {
                     var tp = _parsers.Get(type, () => _parserResolver(type));
                     if (tp != null)
@@ -927,8 +1001,12 @@ namespace PetaJson
                     }
                 }
 
+#if PETAJSON_PORTABLE
+                if (typeInfo.IsClass && type != typeof(object))
+#else
                 // Call reference type resolver
                 if (type.IsClass && type != typeof(object))
+#endif
                 {
                     var into = DecoratingActivator.CreateInstance(type);
                     ParseInto(into);
@@ -954,7 +1032,7 @@ namespace PetaJson
                 var type = into.GetType();
 
                 // Existing parse into handler?
-                Action<IJsonReader,object> parseInto;
+                Action<IJsonReader, object> parseInto;
                 if (_intoParsers.TryGetValue(type, out parseInto))
                 {
                     parseInto(this, into);
@@ -963,11 +1041,20 @@ namespace PetaJson
 
                 // Generic dictionary?
                 var dictType = Utils.FindGenericInterface(type, typeof(IDictionary<,>));
-                if (dictType!=null)
+#if PETAJSON_PORTABLE
+                var dictTypeInfo = dictType == null ? null : dictType.GetTypeInfo();
+#endif
+                if (dictType != null)
                 {
                     // Get the key and value types
+#if PETAJSON_PORTABLE
+                    var typeKey = dictTypeInfo.GenericTypeArguments[0];
+                    var typeValue = dictType.GenericTypeArguments[1];
+#else
                     var typeKey = dictType.GetGenericArguments()[0];
                     var typeValue = dictType.GetGenericArguments()[1];
+#endif
+
 
                     // Parse it
                     IDictionary dict = (IDictionary)into;
@@ -982,11 +1069,14 @@ namespace PetaJson
 
                 // Generic list
                 var listType = Utils.FindGenericInterface(type, typeof(IList<>));
-                if (listType!=null)
+                if (listType != null)
                 {
+#if PETAJSON_PORTABLE
+                    var typeElement = listType.GenericTypeArguments[0];
+#else
                     // Get element type
                     var typeElement = listType.GetGenericArguments()[0];
-
+#endif
                     // Parse it
                     IList list = (IList)into;
                     list.Clear();
@@ -1012,7 +1102,7 @@ namespace PetaJson
 
                 // Untyped list
                 var objList = into as IList;
-                if (objList!=null)
+                if (objList != null)
                 {
                     objList.Clear();
                     ParseArray(() =>
@@ -1038,19 +1128,19 @@ namespace PetaJson
                 return (T)Parse(typeof(T));
             }
 
-            public LiteralKind GetLiteralKind() 
-            { 
-                return _tokenizer.LiteralKind; 
-            }
-            
-            public string GetLiteralString() 
-            { 
-                return _tokenizer.String; 
+            public LiteralKind GetLiteralKind()
+            {
+                return _tokenizer.LiteralKind;
             }
 
-            public void NextToken() 
-            { 
-                _tokenizer.NextToken(); 
+            public string GetLiteralString()
+            {
+                return _tokenizer.String;
+            }
+
+            public void NextToken()
+            {
+                _tokenizer.NextToken();
             }
 
             // Parse a dictionary
@@ -1070,7 +1160,7 @@ namespace PetaJson
                 {
                     // Parse the key
                     string key = null;
-                    if (_tokenizer.CurrentToken == Token.Identifier && (_options & JsonOptions.StrictParser)==0)
+                    if (_tokenizer.CurrentToken == Token.Identifier && (_options & JsonOptions.StrictParser) == 0)
                     {
                         key = _tokenizer.String;
                     }
@@ -1091,7 +1181,7 @@ namespace PetaJson
                     // Call the callback, quit if cancelled
                     _contextStack.Add(key);
                     bool doDefaultProcessing = callback(key);
-                    _contextStack.RemoveAt(_contextStack.Count-1);
+                    _contextStack.RemoveAt(_contextStack.Count - 1);
                     if (!doDefaultProcessing)
                         return;
 
@@ -1126,11 +1216,11 @@ namespace PetaJson
                 {
                     _contextStack.Add(string.Format("[{0}]", index));
                     callback();
-                    _contextStack.RemoveAt(_contextStack.Count-1);
+                    _contextStack.RemoveAt(_contextStack.Count - 1);
 
                     if (_tokenizer.SkipIf(Token.Comma))
                     {
-                        if ((_options & JsonOptions.StrictParser)!=0 && _tokenizer.CurrentToken==Token.CloseSquare)
+                        if ((_options & JsonOptions.StrictParser) != 0 && _tokenizer.CurrentToken == Token.CloseSquare)
                         {
                             throw new InvalidDataException("Trailing commas not allowed in strict mode");
                         }
@@ -1190,7 +1280,7 @@ namespace PetaJson
                 var formatJson = ReflectionInfo.FindFormatJson(type);
                 if (formatJson != null)
                 {
-                    if (formatJson.ReturnType==typeof(void))
+                    if (formatJson.ReturnType == typeof(void))
                         return (w, obj) => formatJson.Invoke(obj, new Object[] { w });
                     if (formatJson.ReturnType == typeof(string))
                         return (w, obj) => w.WriteStringLiteral((string)formatJson.Invoke(obj, new Object[] { }));
@@ -1224,7 +1314,7 @@ namespace PetaJson
                 if (_atStartOfLine)
                     return;
 
-                if ((_options & JsonOptions.WriteWhitespace)!=0)
+                if ((_options & JsonOptions.WriteWhitespace) != 0)
                 {
                     WriteRaw("\n");
                     WriteRaw(new string('\t', IndentLevel));
@@ -1294,7 +1384,7 @@ namespace PetaJson
                 while (pos < length)
                 {
                     var ch = str[pos];
-                    if (ch == '\\' || ch == '/' || ch == '\"' || (ch>=0 && ch <= 0x1f) || (ch >= 0x7f && ch <=0x9f) || ch==0x2028 || ch== 0x2029)
+                    if (ch == '\\' || ch == '/' || ch == '\"' || (ch >= 0 && ch <= 0x1f) || (ch >= 0x7f && ch <= 0x9f) || ch == 0x2028 || ch == 0x2029)
                         return pos;
                     pos++;
                 }
@@ -1323,7 +1413,7 @@ namespace PetaJson
                     {
                         case '\"': _writer.Write("\\\""); break;
                         case '\\': _writer.Write("\\\\"); break;
-                        case '/':  _writer.Write("\\/"); break;
+                        case '/': _writer.Write("\\/"); break;
                         case '\b': _writer.Write("\\b"); break;
                         case '\f': _writer.Write("\\f"); break;
                         case '\n': _writer.Write("\\n"); break;
@@ -1410,9 +1500,16 @@ namespace PetaJson
                 }
 
                 // Enumerated type?
+#if PETAJSON_PORTABLE
+                TypeInfo typeInfo = type.GetTypeInfo();
+                if(typeInfo.IsEnum)
+                {
+                    if (typeInfo.GetCustomAttributes(typeof(FlagsAttribute), false).Any())
+#else
                 if (type.IsEnum)
                 {
                     if (type.GetCustomAttributes(typeof(FlagsAttribute), false).Any())
+#endif
                         WriteRaw(Convert.ToUInt32(value).ToString(CultureInfo.InvariantCulture));
                     else
                         WriteStringLiteral(value.ToString());
@@ -1435,7 +1532,7 @@ namespace PetaJson
                 }
 
                 // Dictionary?
-                var dso = value as IDictionary<string,object>;
+                var dso = value as IDictionary<string, object>;
                 if (dso != null)
                 {
                     WriteDictionary(() =>
@@ -1490,7 +1587,7 @@ namespace PetaJson
             // True if deprecated
             public bool Deprecated;
 
-            
+
 
             // Reflected member info
             MemberInfo _mi;
@@ -1548,8 +1645,30 @@ namespace PetaJson
 
             public static MethodInfo FindFormatJson(Type type)
             {
+#if PETAJSON_PORTABLE
+                TypeInfo typeInfo = type.GetTypeInfo();
+                if(typeInfo.IsValueType)
+#else
                 if (type.IsValueType)
+#endif
                 {
+#if PETAJSON_PORTABLE
+                    var formatJson = typeInfo.GetDeclaredMethod("FormatJson");
+                    if(formatJson != null)
+                    {
+                        ParameterInfo[] paramInfos = formatJson.GetParameters();
+                        if(formatJson.ReturnType == typeof(void))
+                        {
+                            if (paramInfos != null && paramInfos.Length == 1 && paramInfos[0].ParameterType == typeof(IJsonWriter))
+                                return formatJson;
+                        }
+                        else if(formatJson.ReturnType == typeof(string))
+                        {
+                            if (paramInfos == null || paramInfos.Length == 0)
+                                return formatJson;
+                        }
+                    }
+#else
                     // Try `void FormatJson(IJsonWriter)`
                     var formatJson = type.GetMethod("FormatJson", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance, null, new Type[] { typeof(IJsonWriter) }, null);
                     if (formatJson != null && formatJson.ReturnType == typeof(void))
@@ -1559,12 +1678,29 @@ namespace PetaJson
                     formatJson = type.GetMethod("FormatJson", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance, null, new Type[] { }, null);
                     if (formatJson != null && formatJson.ReturnType == typeof(string))
                         return formatJson;
+#endif
                 }
                 return null;
             }
 
             public static MethodInfo FindParseJson(Type type)
             {
+#if PETAJSON_PORTABLE
+                var typeInfo = type.GetTypeInfo();
+                var formatJson = typeInfo.GetDeclaredMethod("ParseJson");
+                if (formatJson != null)
+                {
+                    ParameterInfo[] paramInfos = formatJson.GetParameters();
+                    if (formatJson.ReturnType == type && paramInfos != null && paramInfos.Length == 1)
+                    {
+                        Type firstParam = paramInfos[0].ParameterType;
+                        if (firstParam == typeof(IJsonReader) || firstParam == typeof(string))
+                        {
+                            return formatJson;
+                        }
+                    }
+                }
+#else
                 // Try `T ParseJson(IJsonReader)`
                 var parseJson = type.GetMethod("ParseJson", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static, null, new Type[] { typeof(IJsonReader) }, null);
                 if (parseJson != null && parseJson.ReturnType == type)
@@ -1574,7 +1710,7 @@ namespace PetaJson
                 parseJson = type.GetMethod("ParseJson", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static, null, new Type[] { typeof(string) }, null);
                 if (parseJson != null && parseJson.ReturnType == type)
                     return parseJson;
-
+#endif
                 return null;
             }
 
@@ -1587,7 +1723,7 @@ namespace PetaJson
                     if (writing != null)
                         writing.OnJsonWriting(w);
 
-                    foreach (var jmi in Members.Where(x=>!x.Deprecated))
+                    foreach (var jmi in Members.Where(x => !x.Deprecated))
                     {
                         w.WriteKeyNoEscaping(jmi.JsonKey);
                         w.WriteValue(jmi.GetValue(val));
@@ -1678,10 +1814,14 @@ namespace PetaJson
                 // Check cache
                 return _cache.Get(type, () =>
                 {
-                    var allMembers = Utils.GetAllFieldsAndProperties(type); 
+                    var allMembers = Utils.GetAllFieldsAndProperties(type);
 
                     // Does type have a [Json] attribute
+#if PETAJSON_PORTABLE
+                    bool typeMarked = type.GetTypeInfo().GetCustomAttributes(typeof(JsonAttribute), true).OfType<JsonAttribute>().Any();
+#else
                     bool typeMarked = type.GetCustomAttributes(typeof(JsonAttribute), true).OfType<JsonAttribute>().Any();
+#endif
 
                     // Do any members have a [Json] attribute
                     bool anyFieldsMarked = allMembers.Any(x => x.GetCustomAttributes(typeof(JsonAttribute), false).OfType<JsonAttribute>().Any());
@@ -1757,8 +1897,12 @@ namespace PetaJson
                 var members = Utils.GetAllFieldsAndProperties(type).Select(x => callback(x)).Where(x => x != null).ToList();
 
                 // Anything with KeepInstance must be a reference type
+#if PETAJSON_PORTABLE
+                var invalid = members.FirstOrDefault(x => x.KeepInstance && x.MemberType.GetTypeInfo().IsValueType);
+#else
                 var invalid = members.FirstOrDefault(x => x.KeepInstance && x.MemberType.IsValueType);
-                if (invalid!=null)
+#endif
+                if (invalid != null)
                 {
                     throw new InvalidOperationException(string.Format("KeepInstance=true can only be applied to reference types ({0}.{1})", type.FullName, invalid.Member));
                 }
@@ -1802,8 +1946,8 @@ namespace PetaJson
                     TValue val;
                     if (!_map.TryGetValue(key, out val))
                     {
-						// Store the new one
-						val = createIt();
+                        // Store the new one
+                        val = createIt();
                         _map[key] = val;
                     }
                     return val;
@@ -1840,7 +1984,7 @@ namespace PetaJson
                 }
             }
 
-            Dictionary<TKey, TValue> _map = new Dictionary<TKey,TValue>();
+            Dictionary<TKey, TValue> _map = new Dictionary<TKey, TValue>();
             ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
         }
 
@@ -1852,19 +1996,31 @@ namespace PetaJson
                 if (t == null)
                     return Enumerable.Empty<FieldInfo>();
 
+#if PETAJSON_PORTABLE
+                return t.GetTypeInfo().DeclaredMembers.Where(x => x is FieldInfo || x is PropertyInfo).Concat(GetAllFieldsAndProperties(t.GetTypeInfo().BaseType));
+#else
                 BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly;
                 return t.GetMembers(flags).Where(x => x is FieldInfo || x is PropertyInfo).Concat(GetAllFieldsAndProperties(t.BaseType));
+#endif
             }
 
             public static Type FindGenericInterface(Type type, Type tItf)
             {
+#if PETAJSON_PORTABLE
+                foreach (var t in type.GetTypeInfo().ImplementedInterfaces)
+                {
+                    // Is this a generic list?
+                    if (t.GetTypeInfo().IsGenericType && t.GetGenericTypeDefinition() == tItf)
+                        return t;
+                }
+#else
                 foreach (var t in type.GetInterfaces())
                 {
                     // Is this a generic list?
                     if (t.IsGenericType && t.GetGenericTypeDefinition() == tItf)
                         return t;
                 }
-
+#endif
                 return null;
             }
 
@@ -1880,7 +2036,11 @@ namespace PetaJson
                 var pi = mi as PropertyInfo;
                 if (pi != null)
                 {
+#if PETAJSON_PORTABLE
+                    var gm = pi.GetMethod;
+#else
                     var gm = pi.GetGetMethod(true);
+#endif
                     return (gm != null && gm.IsPublic);
                 }
 
@@ -1889,6 +2049,27 @@ namespace PetaJson
 
             public static Type ResolveInterfaceToClass(Type tItf)
             {
+#if PETAJSON_PORTABLE
+                var tInfoItf = tItf.GetTypeInfo();
+
+                // Generic type
+                if (tInfoItf.IsGenericType)
+                {
+                    var genDef = tItf.GetGenericTypeDefinition();
+
+                    // IList<> -> List<>
+                    if (genDef == typeof(IList<>))
+                    {
+                        return typeof(List<>).MakeGenericType(tInfoItf.GenericTypeArguments);
+                    }
+
+                    // IDictionary<string,> -> Dictionary<string,>
+                    if (genDef == typeof(IDictionary<,>) && tInfoItf.GenericTypeArguments[0] == typeof(string))
+                    {
+                        return typeof(Dictionary<,>).MakeGenericType(tInfoItf.GenericTypeArguments);
+                    }
+                }
+#else
                 // Generic type
                 if (tItf.IsGenericType)
                 {
@@ -1906,6 +2087,7 @@ namespace PetaJson
                         return typeof(Dictionary<,>).MakeGenericType(tItf.GetGenericArguments());
                     }
                 }
+#endif
 
                 // IEnumerable -> List<object>
                 if (tItf == typeof(IEnumerable))
@@ -2147,7 +2329,7 @@ namespace PetaJson
                         else
                             break;
                     }
-                    
+
                     // Remember position of token
                     CurrentTokenPosition = _currentCharPos;
 
@@ -2167,7 +2349,7 @@ namespace PetaJson
                             {
                                 case '/':
                                     NextChar();
-                                    while (_currentChar!='\0' && _currentChar != '\r' && _currentChar != '\n')
+                                    while (_currentChar != '\0' && _currentChar != '\r' && _currentChar != '\n')
                                     {
                                         NextChar();
                                     }
@@ -2175,7 +2357,7 @@ namespace PetaJson
 
                                 case '*':
                                     bool endFound = false;
-                                    while (!endFound && _currentChar!='\0')
+                                    while (!endFound && _currentChar != '\0')
                                     {
                                         if (_currentChar == '*')
                                         {
@@ -2196,66 +2378,66 @@ namespace PetaJson
 
                         case '\"':
                         case '\'':
-                        {
-                            _sb.Length = 0;
-                            var quoteKind = _currentChar;
-                            NextChar();
-                            while (_currentChar!='\0')
                             {
-                                if (_currentChar == '\\')
-                                {
-                                    NextChar();
-                                    var escape = _currentChar;
-                                    switch (escape)
-                                    {
-                                        case '\"': _sb.Append('\"'); break;
-                                        case '\\': _sb.Append('\\'); break;
-                                        case '/': _sb.Append('/'); break;
-                                        case 'b': _sb.Append('\b'); break;
-                                        case 'f': _sb.Append('\f'); break;
-                                        case 'n': _sb.Append('\n'); break;
-                                        case 'r': _sb.Append('\r'); break;
-                                        case 't': _sb.Append('\t'); break;
-                                        case 'u':
-                                            var sbHex = new StringBuilder();
-                                            for (int i = 0; i < 4; i++)
-                                            {
-                                                NextChar();
-                                                sbHex.Append(_currentChar);
-                                            }
-                                            _sb.Append((char)Convert.ToUInt16(sbHex.ToString(), 16));
-                                            break;
-
-                                        default:
-                                            throw new InvalidDataException(string.Format("Invalid escape sequence in string literal: '\\{0}'", _currentChar));
-                                    }
-                                }
-                                else if (_currentChar == quoteKind)
-                                {
-                                    String = _sb.ToString();
-                                    CurrentToken = Token.Literal;
-                                    LiteralKind = LiteralKind.String;
-                                    NextChar();
-                                    return;
-                                }
-                                else
-                                {
-                                    _sb.Append(_currentChar);
-                                }
-
+                                _sb.Length = 0;
+                                var quoteKind = _currentChar;
                                 NextChar();
-                            }
-                            throw new InvalidDataException("syntax error, unterminated string literal");
-                        }
+                                while (_currentChar != '\0')
+                                {
+                                    if (_currentChar == '\\')
+                                    {
+                                        NextChar();
+                                        var escape = _currentChar;
+                                        switch (escape)
+                                        {
+                                            case '\"': _sb.Append('\"'); break;
+                                            case '\\': _sb.Append('\\'); break;
+                                            case '/': _sb.Append('/'); break;
+                                            case 'b': _sb.Append('\b'); break;
+                                            case 'f': _sb.Append('\f'); break;
+                                            case 'n': _sb.Append('\n'); break;
+                                            case 'r': _sb.Append('\r'); break;
+                                            case 't': _sb.Append('\t'); break;
+                                            case 'u':
+                                                var sbHex = new StringBuilder();
+                                                for (int i = 0; i < 4; i++)
+                                                {
+                                                    NextChar();
+                                                    sbHex.Append(_currentChar);
+                                                }
+                                                _sb.Append((char)Convert.ToUInt16(sbHex.ToString(), 16));
+                                                break;
 
-                        case '{': CurrentToken =  Token.OpenBrace; NextChar(); return;
-                        case '}': CurrentToken =  Token.CloseBrace; NextChar(); return;
-                        case '[': CurrentToken =  Token.OpenSquare; NextChar(); return;
-                        case ']': CurrentToken =  Token.CloseSquare; NextChar(); return;
-                        case '=': CurrentToken =  Token.Equal; NextChar(); return;
-                        case ':': CurrentToken =  Token.Colon; NextChar(); return;
-                        case ';': CurrentToken =  Token.SemiColon; NextChar(); return;
-                        case ',': CurrentToken =  Token.Comma; NextChar(); return;
+                                            default:
+                                                throw new InvalidDataException(string.Format("Invalid escape sequence in string literal: '\\{0}'", _currentChar));
+                                        }
+                                    }
+                                    else if (_currentChar == quoteKind)
+                                    {
+                                        String = _sb.ToString();
+                                        CurrentToken = Token.Literal;
+                                        LiteralKind = LiteralKind.String;
+                                        NextChar();
+                                        return;
+                                    }
+                                    else
+                                    {
+                                        _sb.Append(_currentChar);
+                                    }
+
+                                    NextChar();
+                                }
+                                throw new InvalidDataException("syntax error, unterminated string literal");
+                            }
+
+                        case '{': CurrentToken = Token.OpenBrace; NextChar(); return;
+                        case '}': CurrentToken = Token.CloseBrace; NextChar(); return;
+                        case '[': CurrentToken = Token.OpenSquare; NextChar(); return;
+                        case ']': CurrentToken = Token.CloseSquare; NextChar(); return;
+                        case '=': CurrentToken = Token.Equal; NextChar(); return;
+                        case ':': CurrentToken = Token.Colon; NextChar(); return;
+                        case ';': CurrentToken = Token.SemiColon; NextChar(); return;
+                        case ',': CurrentToken = Token.Comma; NextChar(); return;
                         case '\0': CurrentToken = Token.EOF; return;
                     }
 
@@ -2283,21 +2465,21 @@ namespace PetaJson
                         {
                             case "true":
                                 LiteralKind = LiteralKind.True;
-                                CurrentToken =  Token.Literal;
+                                CurrentToken = Token.Literal;
                                 return;
 
                             case "false":
                                 LiteralKind = LiteralKind.False;
-                                CurrentToken =  Token.Literal;
+                                CurrentToken = Token.Literal;
                                 return;
 
                             case "null":
                                 LiteralKind = LiteralKind.Null;
-                                CurrentToken =  Token.Literal;
+                                CurrentToken = Token.Literal;
                                 return;
                         }
 
-                        CurrentToken =  Token.Identifier;
+                        CurrentToken = Token.Identifier;
                         return;
                     }
 
@@ -2324,7 +2506,7 @@ namespace PetaJson
 
                 // Hex prefix?
                 bool hex = false;
-                if (_currentChar == '0' && (_options & JsonOptions.StrictParser)==0)
+                if (_currentChar == '0' && (_options & JsonOptions.StrictParser) == 0)
                 {
                     _sb.Append(_currentChar);
                     NextChar();
@@ -2475,7 +2657,7 @@ namespace PetaJson
                     if (formatJson.ReturnType == typeof(string))
                     {
                         // w.WriteStringLiteral(o.FormatJson())
-                        il.Emit(OpCodes.Ldarg_0); 
+                        il.Emit(OpCodes.Ldarg_0);
                         il.Emit(OpCodes.Ldarg_1);
                         il.Emit(OpCodes.Unbox, type);
                         il.Emit(OpCodes.Call, formatJson);
@@ -2786,7 +2968,7 @@ namespace PetaJson
                         il.Emit(OpCodes.Call, parseJson);
                         il.Emit(OpCodes.Box, type);
                         il.Emit(OpCodes.Ret);
-                        return (Func<IJsonReader,Type,object>)method.CreateDelegate(typeof(Func<IJsonReader,Type,object>));
+                        return (Func<IJsonReader, Type, object>)method.CreateDelegate(typeof(Func<IJsonReader, Type, object>));
                     }
                     else
                     {

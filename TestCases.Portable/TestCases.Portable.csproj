@@ -1,0 +1,103 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="12.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{F5886FC9-9BBB-4BF2-B24A-071026E0AF53}</ProjectGuid>
+    <OutputType>Exe</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>TestCases.Portable</RootNamespace>
+    <AssemblyName>TestCases.Portable</AssemblyName>
+    <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Runtime.Serialization" />
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="System.Data.DataSetExtensions" />
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Xml" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\TestCases\PetaTest.cs">
+      <Link>PetaTest.cs</Link>
+    </Compile>
+    <Compile Include="..\TestCases\Program.cs">
+      <Link>Program.cs</Link>
+    </Compile>
+    <Compile Include="..\TestCases\TestAbstractTypes.cs">
+      <Link>TestAbstractTypes.cs</Link>
+    </Compile>
+    <Compile Include="..\TestCases\TestConcreteFromInterface.cs">
+      <Link>TestConcreteFromInterface.cs</Link>
+    </Compile>
+    <Compile Include="..\TestCases\TestCustomFormat.cs">
+      <Link>TestCustomFormat.cs</Link>
+    </Compile>
+    <Compile Include="..\TestCases\TestDictionaryUtils.cs">
+      <Link>TestDictionaryUtils.cs</Link>
+    </Compile>
+    <Compile Include="..\TestCases\TestNullableTypes.cs">
+      <Link>TestNullableTypes.cs</Link>
+    </Compile>
+    <Compile Include="..\TestCases\TestOptions.cs">
+      <Link>TestOptions.cs</Link>
+    </Compile>
+    <Compile Include="..\TestCases\TestPrimitiveTypes.cs">
+      <Link>TestPrimitiveTypes.cs</Link>
+    </Compile>
+    <Compile Include="..\TestCases\TestReparse.cs">
+      <Link>TestReparse.cs</Link>
+    </Compile>
+    <Compile Include="..\TestCases\TestsEvents.cs">
+      <Link>TestsEvents.cs</Link>
+    </Compile>
+    <Compile Include="..\TestCases\TestsGeneral.cs">
+      <Link>TestsGeneral.cs</Link>
+    </Compile>
+    <Compile Include="..\TestCases\TestsReflection.cs">
+      <Link>TestsReflection.cs</Link>
+    </Compile>
+    <Compile Include="Properties\AssemblyInfo.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="App.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\PetaJson.Portable\PetaJson.Portable.csproj">
+      <Project>{a6b09975-6b29-442b-9c9e-7290cf9148d6}</Project>
+      <Name>PetaJson.Portable</Name>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
+       Other similar extension points exist, see Microsoft.Common.targets.
+  <Target Name="BeforeBuild">
+  </Target>
+  <Target Name="AfterBuild">
+  </Target>
+  -->
+</Project>
