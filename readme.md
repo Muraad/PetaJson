@@ -37,6 +37,7 @@ Well almost, you'll probably want some `using PetaJson;` clauses and depending o
 
 In a portable class library System.Reflection.Emit is not availabe. Also reflection works in a different way. 
 Often `TypeInfo` instead of `Type` have to be used and some functions are implemented different.
+Further System.Diagnostics.Debug.WriteLine is used instead of non-portable Console.WriteLine when needed.
 
 If `PETAJSON_PORTABLE` is defined, `PETAJSON_NO_DYNAMIC`, `PETAJSON_NO_EMIT` and `PETAJSON_NO_DATACONTRACT` have to be defined to. 
 
