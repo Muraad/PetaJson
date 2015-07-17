@@ -33,6 +33,12 @@ Well almost, you'll probably want some `using PetaJson;` clauses and depending o
 * `PETAJSON_NO_DYNAMIC` - disable support for System.Dynamic.ExpandoObject
 * `PETAJSON_NO_EMIT` - disable use of System.Reflection.Emit (slower, more portable)
 * `PETAJSON_NO_DATACONTRACT` - disable support for System.Runtime.Serialization.DataContract/Member
+* `PETAJSON_PORTABLE` - enable support for portable class library
+
+In a portable class library System.Reflection.Emit is not availabe. Also reflection works in a different way. 
+Often `TypeInfo` instead of `Type` have to be used and some functions are implemented different.
+
+If `PETAJSON_PORTABLE` is defined, `PETAJSON_NO_DYNAMIC`, `PETAJSON_NO_EMIT` and `PETAJSON_NO_DATACONTRACT` have to be defined to. 
 
 ## Generating JSON
 
