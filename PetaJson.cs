@@ -16,6 +16,7 @@
 // Define PETAJSON_NO_EMIT to disable Reflection.Emit
 // Define PETAJSON_NO_DATACONTRACT to disable support for [DataContract]/[DataMember]
 // Define PETAJSON_PORTABLE to enable usage of TypeInfo instead of Type for Reflection
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
